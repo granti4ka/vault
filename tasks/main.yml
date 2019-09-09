@@ -1,0 +1,62 @@
+- name: "ensure dirs"
+  file:
+    path: "{{data_dir}}/{{item}}"
+    state: directory
+  with_items:
+    - "config"
+    - "file"
+    - "logs"
+    - "policies"
+
+# TODO: add SSL
+- name: copy vault config
+  copy:
+    src: config.hcl
+    dest: "{{data_dir}}/config/config.hcl"
+
+- name: copy vault setup-script
+  copy:
+    src: setup.sh
+    dest: "{{data_dir}}/config/setup.sh"
+
+- name: copy vault unseal-script
+  copy:
+    src: unseal.sh
+    dest: "{{data_dir}}/config/unseal.sh"
+
+
+- name: Run vault container
+  docker_container:
+    name: vault
+    image: vault:1.2.2
+    state: started
+    ports:
+      - 0.0.0.0:8200:8200
+    restart_policy: always
+#    recreate: yes
+    volumes:
+      - "{{data_dir}}/config:/vault/config"
+      - "{{data_dir}}/policies:/vault/policies"
+      - "{{data_dir}}/file:/vault/file"
+      - "{{data_dir}}/logs:/vault/logs"
+    env:
+      VAULT_ADDR: "http://127.0.0.1:8200"
+#    cap_add:
+#      - IPC_LOCK
+    entrypoint: vault server -config=/vault/config/config.hcl
+    capabilities:
+      - IPC_LOCK
+
+- name: Initialize and unseal vault
+  shell: |
+    docker exec vault sh -l -c "sh /vault/config/setup.sh > /vault/logs/setup.log"
+  register: vault_setup
+  when: first_run | default(False)
+
+- debug: msg="{{ vault_setup.stdout }}"
+  when: first_run | default(False)
+
+- name: Unseal vault
+  shell: |
+    docker exec vault sh -l -c "sh /vault/config/unseal.sh >> /vault/logs/unseal.log"
+  register: vault_unseal

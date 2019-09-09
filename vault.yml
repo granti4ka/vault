@@ -1,0 +1,10 @@
+#ansible-playbook -i hosts vault.yml -e first_run=yes
+#ansible-playbook -i hosts vault.yml
+
+- hosts: vault
+  connection: local
+  become: yes
+  tasks:
+
+  roles:
+     - vault
